@@ -1,0 +1,49 @@
+####################### Data paras ##############################
+
+imgSize: 256
+dataFileName: "datas.mat"
+mask_path: "D:/datas/masks/radial/radial_30.npy"
+imageDataDir: "D:/datas/IXI-T1-save/"
+minmax_noise_val: [-0.01, 0.01]
+slice_range : [20,120]
+
+######################## Net paras ##############################
+bilinear: 1
+ispool: 1      
+ndf: 64
+num_input_slices: 2
+fMapNum: 32
+####################### Trainning paras #########################
+GAN_training: 1
+isTrain: 1
+lr : 0.001
+batch_size: 2
+epochs: 500
+val_percent: 0.2
+tb_write_loss: 1
+tb_write_image: 1
+tb_dir: "E:/DLCode/DLFastReconstruction/PsychoGan/tb3/" 
+loss_weights: [1000, 1000, 5, 0.1, 0]                                   # Loss weighting [Imspac L2, Imspace L1, Kspace L2, GAN_Loss]. Losses are weighted to be roughly at the same scale.
+load_cp: 0   
+resume_training: 0                                                       # 0 to start a new train or this is a checkpoint path 
+output_dir: "E:/DLCode/DLFastReconstruction/PsychoGan/checkpoints/"                                          #checkpoint dir
+stopPatience: 20
+save_step : 5
+weight_cliping_limit : 0.01
+n_critic : 5
+####################### Test paras ##############################
+masked_kspace: True
+####################### Run time paras ##########################
+
+device: 'cuda'
+train_num_workers: 0
+val_num_workers: 0
+
+##################### Predict paras #############################
+predictDir : "D:/datas/test/testdata.mat"
+predictResultPath : "D:/datas/GanResult/predict/"
+predResultName : "predResult_gaussian1d.mat"
+savePredication: 1
+visualize_images: 1
+predModelPath: "E:/DLCode/GanCode/checkpoints/gaussian1d30/Best_CP_epoch44.pth"
+

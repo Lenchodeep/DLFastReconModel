@@ -1,0 +1,85 @@
+####################### the model paras ###################################
+imgSize: 256                                  ## the image size of the network
+slice_range: [20,30]                         ## the slices range of the dataset that used in training
+## noise
+fillnoise: 1                                  ## control if add the noise into the masked kspace
+minmax_noise_val : [-0.01, 0.01]              ## control the noise that added into the masked kspace
+
+##network
+num_input_slices: 3                           ## control the input image slices number and the inputchannels of the Gmodel
+outchannels: 1                                ## control the output slice number of the whole network
+
+netV: "V3"                                    ## control the generator's version
+bottleNeckV: "SESOAM"                         ## control the battleneck architecture
+DRDBnum: 2
+bilinear: 1                                   ## control if use the upsample as the upsample method
+ispool: 1                                     ## control if use the pooling as the downsample operation
+isKDC: 1                                      ## control if use the data consistency in the network
+nb_filters: 32                                ## the basic channel number for the convolution layers
+attName : ''
+ndf: 64                                       ## the basic channel number for the Discriminator
+outDC: 1
+testDC : 1
+################### dataset and dataloader ###############################
+train_num_workers: 0                          ## the number workers for the training dataloader
+val_num_workers: 0                            ## the number workers for the valiation dataloader
+val_percent: 0.2                              ## the percent of valation data in dataset which is used to divide the dataset into train dataset and val dataset
+isZeroToOne: 0
+################## tensorboard ###########################################
+tb_write_image: 1                             ## control if write the image into the tensorboard
+tb_write_loss: 1                              ## control if write the loss curve in the tensorboard
+
+################### train process paras ##################################
+##basic
+# isTrain : 1                                   ## control if is the train mode
+device: "cuda:0"                              ## the device used for trining
+lr: 0.001                                     ## the learning rate for the optimizers
+epochs: 500                                   ## totle training epochs
+batch_size: 2                                 ## the training batchSize
+loss_weights: [1000, 0, 5, 1000, 0.05, 1 ,1000]    ## Loss weighting [Imspac L2, Imspace L1, Kspace L2, facolLoss , ssimLoss, gradient loss]. Losses are weighted to be roughly at the same scale.
+isFacolLoss: 1                                ## using the facol loss or not
+GAN_training : 1                              ## control if tain the gan 
+
+## lr
+lrPatience: 5                                 ## the number for lr to wait when the loss does not decrease
+lrFactor: 0.1                                 ## the scale factor for learning rate to reduce
+
+stopPatience: 15                              ## the patience for the early stop
+##resume
+load_cp: 0                                    ## the fold path for resume learning (where the best chekpoint is)
+resume_training: 0                            ## control if use the resume training
+## save file
+save_step: 5                                  ## the number of epochs to save the checkpoint
+save_png_step: 3                              ## the number of epochs to save the result in png format
+##wgan use
+n_critic: 4                                   ## this is for the wgan training strategy. the bumber of the D to train before trin G
+weight_clip: 0.01                    ## weight cliping threshold of the wgan strategy
+
+#################### test process paras ###################################
+savePredication : 0                           ## control if save the result into the hdf5 format when testing
+visualize_images: 1                           ## control if show the images when testing
+################## train dirs #############################################
+
+output_dir: "E:/DLCode/DLFastReconstruction/PsychoGanCode/checkpoints/IXI/testpsnr111/"                                                                  ## the folder path for storing the checkpoints and so on
+tb_dir: "E:/DLCode/DLFastReconstruction/PsychoGanCode/tb/testpsnr111/"                                                                                ## the folder path for storing the tensorboard file
+# mask_path : "D:/datas/masks/gaussian/mask_30_256.pickle"
+mask_path : "D:/datas/masks/radial/radial_30.pickle"                                                                                                                  ## the path of the mask that used 
+                                                                                                                  ## the path of the mask that used 
+imageDataDir : "D:/datas/IXI-T1-save/"                                                                                                                             ## the path of the train datas that used
+
+# predModelPath: "E:/DLCode/DLFastReconstruction/PsychoGanCode/checkpoints/IXI/DA/test/sepWnetV3-SepDV2-FC-3slices-gaussian30-OUTdc-DlrDecay-ssim1/bestPsnr/Best_PSNR_epoch.pth"                               ## the path of the checkpoints that used for testing
+predModelPath: "E:/DLCode/DLFastReconstruction/SepGAN/checkpoints/IXI/DA/test/SepWnetV3-ssim1single-focalLossBoth/bestPsnr/Best_PSNR_epoch.pth"                               ## the path of the checkpoints that used for testing
+
+# predictDir: "D:/datas/IXI-T1-save/test/"                                                                                                                           ## the path of the test datas that used
+# predictDir: "D:/datas/test/"
+predictDir: "D:/mytest/FastMRI/"
+# predictDir: "D:/datas/brast/4/flair"
+                                                                                                   ## the path of the test datas that used
+
+# predictResultPath: "E:/DLCode/DLFastReconstruction/PsychoGanCode/checkpoints/IXI/DA/test1"                    ## the path for storing the predict file
+predictResultPath: "D:/mytest/FastMRI/SepGAN/radial30"                    ## the path for storing the predict file
+
+predResultName: "predictResult_gaussian30.hdf5"                                                                                                                        ## the name of the test file stored
+
+rec_png_path: "E:/DLCode/PsychoGanCode/png/IXI/sepWnet/recon/"                                                                                                     ## the path for restoring the reconstruction png
+full_png_path: "E:/DLCode/PsychoGanCode/png/IXI/sepWnet/full/"                                                                                                     ## the path for restoring the target png

@@ -1,0 +1,46 @@
+input_channel : 1
+output_channel : 1
+num_filters : 64
+lr: 0.0001
+loss_weights: [1, 200, 10, 10]                                   # Loss weighting [Imspac L2, Imspace L1, Kspace L2, GAN_Loss]. Losses are weighted to be roughly at the same scale.
+slice_range : [50,51]
+minmax_noise_val: [-0.01, 0.01]
+bilinear : 0
+ispool : 0
+num_input_slices : 1
+
+imgSize : 256
+lrStep : 10
+lrgamma : 0.5
+device : "cuda:0"
+
+imageDataDir: "D:/datas/IXI-1-save/"
+output_dir : "E:/DLCode/DLFastReconstruction/SigleModel/checkpoints/dropOut4/"
+tb_dir : "E:/DLCode/DLFastReconstruction/SigleModel/tb/dropOut4/" 
+mask_path: "D:/datas/masks/radial/mask_radial_1_30.npy"
+
+
+predModelPath : "E:/DLCode/DLFastReconstruction/SigleModel/checkpoints/dropOut4/Best_CP_epoch.pth"
+predictDir : "D:/datas/IXI-1-save/test/"
+predictResultPath : "E:/DLCode/DLFastReconstruction/SigleModel/checkpoints/dropOut4/"
+predResultName : "predResult_essgan_test.hdf5"
+
+
+isTrain : 1
+stopPatience : 10
+batch_size : 8
+train_num_workers : 0
+val_num_workers : 0 
+val_percent : 0.2
+tb_write_loss : 1
+tb_write_image : 1
+
+
+epochs : 80
+GAN_training : 1
+save_step : 5
+
+savePredication : 1
+visualize_images: 1
+
+fMapNum : 64

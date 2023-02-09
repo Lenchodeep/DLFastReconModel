@@ -1,0 +1,36 @@
+image_size : 256
+slice_range : [10,30]
+batch_size : 4
+is_early_stopping : 1
+early_stopping_num : 8
+is_saving_model : 1
+save_every_epoch : 4
+lr : 0.0001
+lr_decay : 0.5
+lr_decay_every : 5
+beta1 : 0.5
+n_epoch : 9999
+device : 'cuda:0'
+g_alpha : 15
+g_gamma : 0.0025
+g_beta : 0.1
+g_adv : 1
+
+training_data_path : "D:/datas/IXI-1-save/"
+val_data_path : "D:/datas/IXI-1-save/"
+tb_path : "E:/DLCode/DLFastReconstruction/DAGAN/tb/IXI/testDropPOut1/"
+checkpoint_path : "E:/DLCode/DLFastReconstruction/DAGAN/checkpoint/IXI/testDropPOut1/" 
+mask_path : "D:/datas/masks/radial/radial_30.pickle"
+
+predModelPath : "E:/DLCode/DLFastReconstruction/DAGAN/checkpoint/IXI/radial30/Best_CP_epoch.pth"
+# predictDir: "D:/datas/IXI-1-save/test/"
+predictDir: "D:/mytest/FastMRI/"
+
+# predictDir: "D:/datas/test/"  
+# predictResultPath: "E:/DLCode/testDA-gaussian/"  
+# predictResultPath: "E:/DLCode/DLFastReconstruction/DAGAN/checkpoint/IXI/gaussian30/"
+predictResultPath: "D:/mytest/FastMRI/DAGAN/DARadial30/"  
+
+visualize_images: 1
+savePredication: 0
+

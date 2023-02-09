@@ -1,0 +1,47 @@
+alpha : 1.0
+gamma : 10.0
+imgSize : 256
+isZeroToOne: 1
+lrStep : 100 
+lrgamma : 0.5
+
+fillnoise: 0
+minmax_noise_val: [-0.01, 0.01]
+slice_range : [20,120]
+num_filters: 64
+
+batch_size : 2
+epochs: 100
+lr: 0.0001
+device : "cuda:0"
+train_num_workers : 0
+val_num_workers : 0
+n_critic: 5
+weight_clip: 0.01
+
+tb_write_loss : 1
+tb_write_image : 1
+
+critic_num : 4
+stopPatience : 15
+
+tb_dir: "E:/DLCode/DLFastReconstruction/RefineGAN/tb/IXI/refineGan-fastmri111/"
+data_dir: "D:/datas/knee/T1"
+mask_path : "D:/datas/masks/gaussian/mask_50_256.pickle" 
+
+output_dir : "E:/DLCode/DLFastReconstruction/RefineGAN/checkpoints/IXI/refineGan-fastmri111/"
+save_step : 2
+savePngPath: "E:/DLCode/DLFastReconstruction/RefineGAN/checkpoints/IXI/refineGan-test/PNG/" 
+
+
+############################### test part ####################################
+predModelPath : "E:/DLCode/DLFastReconstruction/RefineGAN/checkpoints/IXI/refinegan_pth/gaussian_50/CP_epoch5.pth"
+predictDir : "D:/datas/IXI-T1-save/test/"  
+# predictDir: "D:/datas/test/"  
+# predictDir: "D:/mytest/FastMRI/"  
+
+# predictResultPath: "D:/mytest/FastMRI/RefineGAN/RefineRadial30/"  
+
+predictResultPath : "E:/DLCode/DLFastReconstruction/RefineGAN/checkpoints/IXI/refinegan_pth/gaussian_50/"
+savePredication : 0
+visualize_images: 0
