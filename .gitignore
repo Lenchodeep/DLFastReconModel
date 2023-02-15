@@ -1,6 +1,7 @@
 checkpoints/
 checkpoint/
 tb/
+*/tensorboard/
 experimentsPng/
 png/
 *.jpg

@@ -12,13 +12,13 @@ from torchvision import transforms
 from  tqdm import tqdm
 from types import SimpleNamespace
 from torch.utils.data import DataLoader
+from torch.nn import functional as F
 import matplotlib.pyplot as plt
 
 '''my modules'''
-from Models import Discriminator, Generator
 from MyDataset import FastMRIDataset, BraTSDataset
-from loss import *
 from utils import *
+from MANet import Generator
 # from MANet import Generator
 from torch.utils.tensorboard import SummaryWriter
 
@@ -26,40 +26,28 @@ def train(args):
     '''Init the model'''
     ## generator
     net_G = Generator(args)
-    # net_G = Generator()
 
     G_optimizer = torch.optim.Adam(net_G.parameters(), lr = args.lr, betas = (0.5,0.999))
     G_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(G_optimizer, 'min', patience = 5, factor=0.1) ## min 表示当监控的量不在下降的时候，降低学习率， patience表示当性能在5个epoch后仍然不下降，降低学习率
     net_G.to(device= args.device)
-
-    ## discriminator
-    net_D = Discriminator(inchannels=1, ndf=32, isFc=False, num_layers=4)
-    D_optimizer = torch.optim.Adam(net_D.parameters(), lr = 2*args.lr, betas=(0.5, 0.999))  ##discriminator 的学习率为Generator的两倍
-    D_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(D_optimizer, 'min', patience = 5, factor=0.1) ## min 表示当监控的量不在下降的时候，降低学习率， patience表示当性能在5个epoch后仍然不下降，降低学习率
-    net_D.to(device=args.device)
-
-    net_D_T1 = Discriminator(inchannels=1, ndf=32, isFc=False, num_layers=4)
-    D_optimizer_T1 = torch.optim.Adam(net_D.parameters(), lr = 2*args.lr, betas=(0.5, 0.999))  ##discriminator 的学习率为Generator的两倍
-    D_scheduler_T1 = torch.optim.lr_scheduler.ReduceLROnPlateau(D_optimizer, 'min', patience = 5, factor=0.1) ## min 表示当监控的量不在下降的时候，降低学习率， patience表示当性能在5个epoch后仍然不下降，降低学习率
-    net_D_T1.to(device=args.device)
 
     ## define the transfor for data augmentation
     transform  = transforms.Compose([
         transforms.ToPILImage(),
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip(),
-        transforms.RandomRotation(5)
+        transforms.RandomRotation(15)
         ])
 
     #init dataloader
 
-    train_dataset = FastMRIDataset(args, True, transform=None)
-    val_dataset = FastMRIDataset(args, False, transform=None)
+    train_dataset = FastMRIDataset(args, True, None)
+    val_dataset = FastMRIDataset(args, False, None)
 
     train_loader = DataLoader(train_dataset, batch_size = args.batch_size, shuffle=True
-                            , num_workers=args.train_num_workers, pin_memory=False, drop_last=True)
+                            , num_workers=args.train_num_workers, pin_memory=True, drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size = args.batch_size, shuffle = True
-                            , num_workers= args.val_num_workers, pin_memory=False, drop_last=True)
+                            , num_workers= args.val_num_workers, pin_memory=True, drop_last=True)
 
     #Init tensor board writer
     if args.tb_write_loss or args.tb_write_image:
@@ -69,17 +57,14 @@ def train(args):
 
     ## loss return : fullLoss, imgloss_T1, imgloss_T2, kloss_T1, kloss_T2, ssimloss_T1, ssimloss_T2, advLoss
 
-    loss = Loss(args)
 
     #load check point
     if args.load_cp:
         checkpoint = torch.load(args.load_cp, map_location=args.device)
         net_G.load_state_dict(checkpoint['G_model_state_dict'])
-        net_D.load_state_dict(checkpoint['D_model_state_dict'])
         if args.resume_training:
             start_epoch = int(checkpoint['epoch'])
             G_optimizer.load_state_dict(checkpoint['G_optimizer_state_dict'])
-            D_optimizer.load_state_dict(checkpoint['D_optimizer_state_dict'])
             G_scheduler.load_state_dict(checkpoint['G_scheduler_state_dict'])
             logging.info(f'Models, optimizer and scheduler loaded from {args.load_cp}')
         else:
@@ -100,7 +85,7 @@ def train(args):
     try:
         for epoch in range(start_epoch, args.epochs):
             net_G.train()   #注意train的调用位置，防止在train的过程中进入eval模式中。
-            net_D.train()
+            # net_D.train()
             progress = 0 
 
             ## train metrics
@@ -131,64 +116,38 @@ def train(args):
                 '''Trainging stage'''
                 for step,batch in enumerate(train_loader):
                     ## BATCH DATA
-                    T2_masked_k = batch['masked_K'].to(device = args.device, dtype = torch.float32)
+                    # T2_masked_k = batch['masked_K'].to(device = args.device, dtype = torch.float32)
                     T2_target_k = batch['target_K'].to(device = args.device, dtype = torch.float32)
                     T2_target_img = batch['target_img'].to(device = args.device, dtype = torch.float32)
-                    T1_masked_k = batch['refer_masked_K'].to(device = args.device, dtype = torch.float32)
+                    T2_masked_img = batch['target_masked_img'].to(device = args.device, dtype = torch.float32)
+                    # T1_masked_k = batch['refer_masked_K'].to(device = args.device, dtype = torch.float32)
                     T1_target_k = batch['refer_K'].to(device = args.device, dtype = torch.float32)
                     T1_target_img = batch['refer_img'].to(device = args.device, dtype = torch.float32)
+                    T1_masked_img = batch['refer_masked_img'].to(device = args.device, dtype = torch.float32)
 
 
                     #forward G
-                    rec_img_T1,rec_k_T1, rec_img_T2, rec_k_T2 = net_G(T1_masked_k, T2_masked_k)
+                    rec_img_T1,rec_mid_T1, rec_img_T2, rec_mid_T2 = net_G(T1_masked_img, T2_masked_img, T1_target_k, T2_target_k)
 
-
-                    # T2t = T2_masked_k.detach().cpu().numpy()
-                    # T1t = rec_img_T2.detach().cpu().numpy()
-                    # k_t1 = rec_k_T1.detach().cpu().numpy()
-                    # print(k_t1.shape)
+                    # testimg = rec_img_T2.detach().cpu().numpy()
                     # plt.figure()
-                    # plt.imshow(np.log(abs(T2t[0,0,:,:]+T2t[0,1,:,:]*1j)), plt.cm.gray)
-                    # plt.figure()
-                    # plt.imshow(T1t[0,0,:,:], plt.cm.gray)
-                    # plt.show()
+                    # plt.imshow(testimg[0,0,:,:], plt.cm.gray)
+                    # # plt.show()
+                    # print(testimg.max())
+                    ## calculate loss function
+                    mid_loss_T1img = F.l1_loss(rec_mid_T1, T1_target_img)
+                    mid_loss_T2img = F.l1_loss(rec_mid_T2, T1_target_img)
+                    mid_loss_img = 0.4*mid_loss_T1img+0.6*mid_loss_T2img
 
+                    loss_T1img = F.l1_loss(rec_img_T1, T1_target_img)
+                    loss_T2img = F.l1_loss(rec_img_T2, T2_target_img)
+                    loss_img = 0.4*loss_T1img+0.6*loss_T2img
 
-                    # get the D out
-                    real_D_example = T2_target_img.detach()  #不需要梯度
-                    fake_D_example = rec_img_T2
-                    D_real_pred = net_D(real_D_example)
-                    D_fake_pred = net_D(fake_D_example)
-                    
-                    real_D_example_T1 = T1_target_img.detach()  #不需要梯度
-                    fake_D_example_T1 = rec_img_T1
-                    D_real_pred_T1 = net_D_T1(real_D_example_T1)
-                    D_fake_pred_T1 = net_D_T1(fake_D_example_T1)
-                    # calculate the D Loss
-
-                    D_fake_detach = net_D(fake_D_example.detach()) #stop backprop to G by detaching
-                    D_real_loss, D_fake_loss, DLoss = loss.calc_disc_loss(D_real_pred, D_fake_detach)
-                    
-                    D_fake_detach_T1 = net_D(fake_D_example_T1.detach())
-                    D_real_loss_T1, D_fake_loss_T1, DLoss_T1 = loss.calc_disc_loss(D_real_pred_T1, D_fake_detach_T1)
-
-                    #calculate G loss
-                    FullLoss, IMloss_T1, IMloss_T2, KLoss_T1, KLoss_T2, SSIMLoss_T1, SSIMLoss_T2, advLoss, advlossT1\
-                     = loss.calc_gen_loss_D(T1_target_img, T2_target_img, rec_img_T1, rec_img_T2,\
-                                        T1_target_k, T2_target_k, rec_k_T1,rec_k_T2, D_fake_pred, D_fake_pred_T1)
+                    FullLoss = 0.6* loss_img + 0.4*mid_loss_img
 
                     #Optimize parameters
-                    #update D
-                    D_optimizer.zero_grad()
-                    DLoss.backward()
-                    D_optimizer_T1.zero_grad()
-                    DLoss_T1.backward()
-                    #update G
                     G_optimizer.zero_grad()
                     FullLoss.backward()
-
-                    D_optimizer.step()
-                    D_optimizer_T1.step()
                     G_optimizer.step()
 
                     ## calculate the psnr
@@ -205,46 +164,45 @@ def train(args):
 
                     # update fullLoss
                     epoch_Full_Loss += FullLoss.item()
-                    epoch_D_Loss += DLoss.item()
-                    epoch_G_Loss += advLoss.item()
-                    epoch_Img_Loss_T1 += IMloss_T1.item()
-                    epoch_Img_Loss_T2 += IMloss_T2.item()
-                    epoch_K_Loss_T1 += KLoss_T1.item()
-                    epoch_K_Loss_T2 += KLoss_T2.item()
+                    epoch_Img_Loss_T1 += loss_T1img.item()
+                    epoch_Img_Loss_T2 += loss_T2img.item()
 
                     epoch_PSNR += psnr
                     epoch_NMSE += nmse
                     epoch_SSIM += ssim
 
-                    progress += 100*T2_target_k.shape[0]/len(train_dataset)
+                    progress += 100*T2_target_img.shape[0]/len(train_dataset)
                     
-                    pbar.set_postfix(**{'FullLoss': FullLoss.item(),'ImT1': IMloss_T1.item(), 'ImT2': IMloss_T2.item(),
-                                    "KLoss_T1 ":KLoss_T1.item(), 'KLoss_T2': KLoss_T2.item(),'Adv G': advLoss.item(), 'Adv D': DLoss.item(),'Adv D T1': DLoss_T1.item(),
+                    pbar.set_postfix(**{'FullLoss': FullLoss.item(),'ImT1': loss_T1img.item(), 'ImT2': loss_T2img.item(),
                                     'PSNR: ' : psnr, 'NMSE: ':nmse, 'SSIM: ':ssim,  'Prctg of train set': progress})
 
-                    pbar.update(T2_target_k.shape[0])# current batch size
+                    pbar.update(T2_target_img.shape[0])# current batch size
 
-                    writer.add_scalar('train/G_AdvLoss_per_step', advLoss.item(), epoch*(len(train_loader))+step)
-                    writer.add_scalar('train/D_AdvLoss_per_step', DLoss.item(), epoch*(len(train_loader))+step)
 
                 '''valdation stage'''
                 net_G.eval()
-                net_D.eval()
                 n_val = len(val_loader)  # number of batch
                 for batch in tqdm(val_loader):
                     val_T2_masked_k = batch['masked_K'].to(device = args.device, dtype = torch.float32)
                     val_T2_target_k = batch['target_K'].to(device = args.device, dtype = torch.float32)
                     val_T2_target_img = batch['target_img'].to(device = args.device, dtype = torch.float32)
+                    val_T2_masked_img = batch['target_masked_img'].to(device = args.device, dtype = torch.float32)
                     val_T1_masked_k = batch['refer_masked_K'].to(device = args.device, dtype = torch.float32)
                     val_T1_target_k = batch['refer_K'].to(device = args.device, dtype = torch.float32)
                     val_T1_target_img = batch['refer_img'].to(device = args.device, dtype = torch.float32)
+                    val_T1_masked_img = batch['refer_masked_img'].to(device = args.device, dtype = torch.float32)
 
                     with torch.no_grad():
-                        val_rec_img_T1,val_rec_k_T1, val_rec_img_T2, val_rec_k_T2 = net_G(val_T1_masked_k, val_T2_masked_k)
+                        val_rec_img_T1,val_rec_mid_T1, val_rec_img_T2, val_rec_mid_T2 = net_G(val_T1_masked_img, val_T2_masked_img, val_T1_target_k, val_T2_target_k)
+                    
+                    val_mid_loss_T1img = F.l1_loss(val_rec_mid_T1, T1_target_img)
+                    val_mid_loss_T2img = F.l1_loss(val_rec_mid_T2, T1_target_img)
+                    val_mid_loss_img = 0.4*val_mid_loss_T1img+0.6*val_mid_loss_T2img
 
-                    val_FullLoss, val_IMloss_T1, val_IMloss_T2, val_KLoss_T1, val_KLoss_T2, val_SSIMLoss_T1, val_SSIMLoss_T2, val_advLoss,_\
-                     = loss.calc_gen_loss_D(val_T1_target_img, val_T2_target_img, val_rec_img_T1, val_rec_img_T2,\
-                                        val_T1_target_k, val_T2_target_k, val_rec_k_T1,val_rec_k_T2, None,None)
+                    val_loss_T1img = F.l1_loss(val_rec_img_T1, val_T1_target_img)
+                    val_loss_T2img = F.l1_loss(val_rec_img_T2, val_T2_target_img)
+                    val_loss_img = 0.4*val_loss_T1img+0.6*val_loss_T2img
+                    valLoss = 0.6* val_loss_img + 0.4*val_mid_loss_img
 
                     val_target_img_detach = val_T2_target_img.detach().cpu().numpy()
                     val_rec_img_detach = val_rec_img_T2.detach().cpu().numpy()
@@ -257,26 +215,21 @@ def train(args):
                     val_nmse = val_nmse/val_target_img_detach.shape[0]
                     val_ssim = val_ssim/val_target_img_detach.shape[0]
 
-                    val_FullLoss += val_FullLoss.item()
-                    val_Img_Loss_T1 += val_IMloss_T1.item()
-                    val_Img_Loss_T2 += val_IMloss_T2.item()
-                    val_K_Loss_T1 += val_KLoss_T1.item() 
-                    val_K_Loss_T2 +=  val_KLoss_T2.item()
+                    val_FullLoss += valLoss.item()
+                    val_Img_Loss_T1 += val_loss_T2img.item()
+                    val_Img_Loss_T2 += val_loss_T2img.item()
+
 
                     val_PSNR += val_psnr
                     val_NMSE += val_nmse
                     val_SSIM += val_ssim
 
-                logging.info('Validation full score: {}, IMT1Loss: {}. IMT2Loss: {}, KLossT1: {}, KLossT2: {}, PSNR: {}, SSIM: {}, NMSE: {},  '
-                         .format(val_FullLoss/n_val, val_Img_Loss_T1/n_val, val_Img_Loss_T2/n_val, val_K_Loss_T1/ n_val, val_K_Loss_T2/ n_val, 
+                logging.info('Validation full score: {}, IMT1Loss: {}. IMT2Loss: {}, PSNR: {}, SSIM: {}, NMSE: {},  '
+                         .format(val_FullLoss/n_val, val_Img_Loss_T1/n_val, val_Img_Loss_T2/n_val, 
                                 val_PSNR/ n_val, val_SSIM/n_val, val_NMSE/n_val))
                 # Schedular update
                 G_scheduler.step(val_FullLoss)
-                D_scheduler.step(val_FullLoss)
-                D_scheduler_T1.step(val_FullLoss)
-
                 net_G.train()
-                net_D.train()
 
             if minValLoss > val_FullLoss:
                 minValLoss = val_FullLoss
@@ -284,11 +237,7 @@ def train(args):
                     'epoch': epoch,
                     'G_model_state_dict': net_G.state_dict(),
                     'G_optimizer_state_dict': G_optimizer.state_dict(),
-                    'G_scheduler_state_dict': G_scheduler.state_dict(),
-                    'D_model_state_dict': net_D.state_dict(),
-                    'D_optimizer_state_dict': D_optimizer.state_dict(),
-                    'D_scheduler_state_dict': D_scheduler.state_dict(),
-
+                    'G_scheduler_state_dict': G_scheduler.state_dict()
                 }, args.output_dir + f'Best_CP_epoch.pth')
                 logging.info(f'Best Checkpoint saved !')
 
@@ -298,10 +247,7 @@ def train(args):
                     'epoch': epoch,
                     'G_model_state_dict': net_G.state_dict(),
                     'G_optimizer_state_dict': G_optimizer.state_dict(),
-                    'G_scheduler_state_dict': G_scheduler.state_dict(),
-                    'D_model_state_dict': net_D.state_dict(),
-                    'D_optimizer_state_dict': D_optimizer.state_dict(),
-                    'D_scheduler_state_dict': D_scheduler.state_dict()
+                    'G_scheduler_state_dict': G_scheduler.state_dict()
                 }, args.output_dir + f'Best_PSNR_epoch.pth')
                 logging.info(f'Best PSNR Checkpoint saved !')
 
@@ -310,8 +256,8 @@ def train(args):
                 writer.add_scalar('train/FullLoss', epoch_Full_Loss / len(train_loader), epoch)
                 writer.add_scalar('train/ImLossT1',epoch_Img_Loss_T1 / len(train_loader), epoch)
                 writer.add_scalar('train/ImLossT2', epoch_Img_Loss_T2 / len(train_loader), epoch)
-                writer.add_scalar('train/KspaceT1', epoch_K_Loss_T1 / len(train_loader), epoch)
-                writer.add_scalar('train/KspaceT2', epoch_K_Loss_T2 / len(train_loader), epoch)
+                # writer.add_scalar('train/KspaceT1', epoch_K_Loss_T1 / len(train_loader), epoch)
+                # writer.add_scalar('train/KspaceT2', epoch_K_Loss_T2 / len(train_loader), epoch)
                 writer.add_scalar('train/SSIM', epoch_SSIM / len(train_loader), epoch)
                 writer.add_scalar('train/PSNR', epoch_PSNR / len(train_loader), epoch)
                 writer.add_scalar('train/NMSE', epoch_NMSE / len(train_loader), epoch)
@@ -322,8 +268,8 @@ def train(args):
                 writer.add_scalar('validation/FullLoss', val_FullLoss / len(val_loader), epoch)
                 writer.add_scalar('validation/ImLossT1', val_Img_Loss_T1 / len(val_loader), epoch)
                 writer.add_scalar('validation/ImLossT2', val_Img_Loss_T2 / len(val_loader), epoch)
-                writer.add_scalar('validation/KspaceT1', val_K_Loss_T1 / len(val_loader), epoch)
-                writer.add_scalar('validation/KspaceT2', val_K_Loss_T2 / len(val_loader), epoch)
+                # writer.add_scalar('validation/KspaceT1', val_K_Loss_T1 / len(val_loader), epoch)
+                # writer.add_scalar('validation/KspaceT2', val_K_Loss_T2 / len(val_loader), epoch)
                 writer.add_scalar('validation/SSIM', val_SSIM / len(val_loader), epoch)
                 writer.add_scalar('validation/PSNR', val_PSNR / len(val_loader), epoch)
                 writer.add_scalar('validation/NMSE', val_nmse / len(val_loader), epoch)
@@ -348,9 +294,6 @@ def train(args):
                     'G_model_state_dict': net_G.state_dict(),
                     'G_optimizer_state_dict': G_optimizer.state_dict(),
                     'G_scheduler_state_dict': G_scheduler.state_dict(),
-                    'D_model_state_dict': net_D.state_dict(),
-                    'D_optimizer_state_dict': D_optimizer.state_dict(),
-                    'D_scheduler_state_dict': D_scheduler.state_dict()
                 }, args.output_dir + f'CP_epoch{epoch + 1}.pth')
                 logging.info(f'Checkpoint {epoch + 1} saved !')
 
@@ -359,10 +302,7 @@ def train(args):
             'epoch': epoch,
             'G_model_state_dict': net_G.state_dict(),
             'G_optimizer_state_dict': G_optimizer.state_dict(),
-            'G_scheduler_state_dict': G_scheduler.state_dict(),
-            'D_model_state_dict': net_D.state_dict(),
-            'D_optimizer_state_dict': D_optimizer.state_dict(),
-            'D_scheduler_state_dict': D_scheduler.state_dict()
+            'G_scheduler_state_dict': G_scheduler.state_dict()
         }, args.output_dir + f'CP_epoch{epoch + 1}_INTERRUPTED.pth')
         logging.info('Saved interrupt')
         try:

@@ -15,7 +15,7 @@ class DeepWiseConv(nn.Module):
         self.deepwiseConv = nn.Sequential(
             nn.Conv2d(inchannels, inchannels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation, groups=inchannels),
             nn.Conv2d(inchannels, outchannels, kernel_size=1)
-        )
+        )  
 
     def forward(self,x):
         return self.deepwiseConv(x)
@@ -75,12 +75,11 @@ class BasicBlockDown(nn.Module):
         ##second conv
         out2 = F.leaky_relu(self.bn2(self.conv2(out1)), 0.1)
 
-        ##third conv, including a residual connection
-        out3 = self.conv3(out2)
-        catout3 = out3+out1
-        out = F.leaky_relu(self.bn3(catout3), 0.1)
+        ##third conv
 
-        return out
+        out3 = F.leaky_relu(self.bn3(self.conv3(out2)), 0.1)
+        ## output including a residual connection
+        return out3+out1
 
 class BasicBlockUp(nn.Module):
     def __init__(self, filters):
@@ -94,12 +93,10 @@ class BasicBlockUp(nn.Module):
     def forward(self,x):
         ##first conv
         out1 = F.leaky_relu(self.bn1(self.conv1(x)), 0.1)
-        ##second conv, including a residual connection
-        out2  = self.conv2(out1)
-        catout2 = out2+x
-        out = F.leaky_relu(self.bn2(catout2), 0.1)
-
-        return out
+        ##second conv
+        out2 = F.leaky_relu(self.bn2(self.conv2(out1)), 0.1)
+        ## output including a residual connection
+        return x+out2
 
 class DRDB(nn.Module):
     def __init__(self, channels,dilateSet = None, isSeparable = True):
@@ -127,7 +124,7 @@ class DRDB(nn.Module):
 
 
 class DRDB_Conv(nn.Module):
-    def __init__(self,inchannels, outchannels, k_size = 3, dilate=1, stride = 1, isSep=False):
+    def __init__(self,inchannels, outchannels, k_size = 3, dilate=1, stride = 1, isSep=True):
         super(DRDB_Conv, self).__init__()
         if isSep:
             self.conv = DeepWiseConv(inchannels, outchannels, kernel_size=k_size, padding=dilate*(k_size-1)//2

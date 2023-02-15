@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import pickle
 
 class Single_level_densenet(nn.Module): 
     def __init__(self,filters, num_conv = 4):
@@ -134,7 +134,7 @@ class Dense_Unet_k(nn.Module):
     def __init__(self, in_chan, out_chan, filters, num_conv = 4):  #64   256
         super(Dense_Unet_k, self).__init__()
         self.conv1T1 = nn.Conv2d(in_chan,filters,1)
-        self.conv1T2 = nn.Conv2d(4,filters,1)
+        self.conv1T2 = nn.Conv2d(2,filters,1)
         self.convdemD0 = nn.Conv2d(64,64,kernel_size=3,padding=1)
         self.convdemD1 = nn.Conv2d(64,64,kernel_size=3,padding=1)
         self.convdemD2 = nn.Conv2d(64,64,kernel_size=3,padding=1)
@@ -552,10 +552,47 @@ class SpatialAttention_img(nn.Module):
         return self.sigmoid(x)
 
 class Generator(nn.Module):
-    def __init__(self):
+    def __init__(self,args):
         super(Generator,self).__init__()
-        self.KUnet = Dense_Unet_k(2,2,64,4)
+        self.KUnet = Dense_Unet_img(1,1,64,4)
         self.IUnet = Dense_Unet_img(1,1,64,4)
+
+        self.filters = args.filters
+        self.device = args.device
+
+        ## init the mask
+        mask_path = args.mask_path
+        with open(mask_path, 'rb') as pickle_file:
+            masks = pickle.load(pickle_file)
+        self.mask = torch.tensor(masks['mask1'] == 1, device=args.device)
+        self.maskNot = self.mask == 0
+
+    # def inverseFT(self, Kspace):
+    #     """The input Kspace has two channels(real and img)"""
+    #     Kspace = Kspace.permute(0, 2, 3, 1)
+    #     img_cmplx = torch.fft.ifft2(Kspace, dim=(1,2))
+    #     img = torch.sqrt(img_cmplx[:, :, :, 0]**2 + img_cmplx[:, :, :, 1]**2)
+    #     img = img[:, None, :, :]
+    #     return img
+    def fftshift(self, img):
+        '''
+            4d tensor FFT operation
+        '''
+        S = int(img.shape[3]/2)
+        img2 = torch.zeros_like(img)
+        img2[:, :, :S, :S] = img[:, :, S:, S:]
+        img2[:, :, S:, S:] = img[:, :, :S, :S]
+        img2[:, :, :S, S:] = img[:, :, S:, :S]
+        img2[:, :, S:, :S] = img[:, :, :S, S:]
+        return img2
+    
+    def FT(self, image):
+        '''
+            Fourier operation 
+        '''
+
+        kspace_cplx = self.fftshift(torch.fft.fft2(image, dim=(2,3)))
+        return kspace_cplx
 
     def inverseFT(self, Kspace):
         """The input Kspace has two channels(real and img)"""
@@ -565,23 +602,33 @@ class Generator(nn.Module):
         img = img[:, None, :, :]
         return img
 
-        
-    def fftshift(self, img):
+    # def KDC_layer(self, rec_K, und_K):
+    #     '''
+    #         K data consistency layer
+    #     '''
+    #     rec_Kspace = (self.mask*torch.complex(und_K[:, 0, :, :], und_K[:, 1, :, :]) + self.maskNot*torch.complex(rec_K[:, 0, :, :], rec_K[:, 1, :, :]))[:, None, :, :]
+    #     final_rec =torch.absolute(torch.fft.ifft2(self.fftshift(rec_Kspace),dim=(2,3)))
 
-        S = int(img.shape[3]/2)
-        img2 = torch.zeros_like(img)
-        img2[:, :, :S, :S] = img[:, :, S:, S:]
-        img2[:, :, S:, S:] = img[:, :, :S, :S]
-        img2[:, :, :S, S:] = img[:, :, S:, :S]
-        img2[:, :, S:, :S] = img[:, :, :S, S:]
-        return img2
+    #     return final_rec, rec_Kspace
+    
+    def IDC_layer(self, rec_Img, und_K):
+        und_k_cplx = torch.complex(und_K[:,0,:,:], und_K[:,1,:,:])[:,None,:,:] 
+        rec_k = self.FT(rec_Img)
+        final_k = (torch.mul(self.mask, und_k_cplx) + torch.mul(self.maskNot, rec_k))
+        final_rec  =  torch.absolute(torch.fft.ifft2(self.fftshift(final_k), dim=(2,3)))
 
-    def forward(self, T1kspace, T2kspace):
-        recon_K_T1, recon_K_T2 = self.KUnet(T1kspace, T2kspace)
+        return final_rec
 
-        input_T1_img = self.inverseFT(self.fftshift(recon_K_T1))
-        input_T2 = self.inverseFT(self.fftshift(recon_K_T2))
-        
-        rec_T1, rec_T2 = self.IUnet(input_T1_img,input_T2)
+    def forward(self, T1img, T2img, T1K, T2K):
+        recon_T1, recon_T2 = self.KUnet(T1img, T2img)
 
-        return rec_T1, recon_K_T1, rec_T2, recon_K_T2
+        recon_mid_T1 = self.IDC_layer(recon_T1, T1K)
+        recon_mid_T2 = self.IDC_layer(recon_T2, T2K)
+
+        rec_T1, rec_T2 = self.IUnet(recon_mid_T1,recon_mid_T2)
+        rec_T1 = self.IDC_layer(rec_T1, T1K)
+        rec_T2 = self.IDC_layer(rec_T2, T2K)
+        # rec_T1 = torch.clamp(F.tanh(rec_final_T1+recon_mid_T1), 0, 1)
+        # rec_T2 = torch.clamp(F.tanh(re_final_T2+recon_mid_T2), 0, 1)
+
+        return rec_T1, recon_mid_T1, rec_T2, recon_mid_T2

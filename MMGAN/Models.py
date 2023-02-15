@@ -50,7 +50,6 @@ class BasicUnet(nn.Module):
         T2_x = self.bottomT2(T2_x5)
 
         T2_1x = self.u4_T2(self.up4_T2(T2_x,T2_y4))
-
         T2_2x = self.u3_T2(self.up3_T2(T2_1x,T2_y3))
         T2_3x = self.u2_T2(self.up2_T2(T2_2x,T2_y2))
         T2_4x = self.u1_T2(self.up1_T2(T2_3x,T2_y1))
@@ -65,8 +64,8 @@ class UnetK(nn.Module):
         super(UnetK, self).__init__()
 
         self.conv1T1 = nn.Conv2d(in_chan,int(filters/2),1)
-        self.conv1T2 = nn.Conv2d(in_chan*2,int(filters/2),1)
-        # self.conv1T2 = nn.Conv2d(in_chan,int(filters/2),1)
+        # self.conv1T2 = nn.Conv2d(in_chan*2,int(filters/2),1)
+        self.conv1T2 = nn.Conv2d(in_chan,int(filters/2),1)
 
 
         self.dT1_1 = BasicBlockDown(int(filters/2), filters)
@@ -129,7 +128,7 @@ class UnetK(nn.Module):
     def forward(self, T1, T2):
         ## input feature extract
         T1_x1 = self.conv1T1(T1)
-        T2 = torch.cat([T1,T2], dim = 1)
+        # T2 = torch.cat([T1,T2], dim = 1)
         T2_x1 = self.conv1T2(T2)
 
         #encoder part
@@ -188,8 +187,8 @@ class UnetI(nn.Module):
         super(UnetI, self).__init__()
 
         self.conv1T1 = nn.Conv2d(in_chan,int(filters/2),1)
-        self.conv1T2 = nn.Conv2d(in_chan*2,int(filters/2),1)
-        # self.conv1T2 = nn.Conv2d(in_chan,int(filters/2),1)
+        # self.conv1T2 = nn.Conv2d(in_chan*2,int(filters/2),1)
+        self.conv1T2 = nn.Conv2d(in_chan,int(filters/2),1)
 
 
         self.dT1_1 = BasicBlockDown(int(filters/2), filters)
@@ -252,7 +251,7 @@ class UnetI(nn.Module):
     def forward(self, T1, T2):
         ## input feature extract
         T1_x1 = self.conv1T1(T1)
-        T2 = torch.cat([T1,T2], dim = 1)
+        # T2 = torch.cat([T1,T2], dim = 1)
         T2_x1 = self.conv1T2(T2)
 
         ##encoder part
@@ -387,8 +386,8 @@ class Generator(nn.Module):
         ##IDC
         rec_T1 = self.IDC_layer(rec_T1, T1kspace)
         rec_T2 = self.IDC_layer(rec_T2, T2kspace)
-        rec_T2 =  torch.tanh(rec_T2)
-        rec_T1 =  torch.tanh(rec_T1)
+        # rec_T2 =  torch.tanh(rec_T2)
+        # rec_T1 =  torch.tanh(rec_T1)
 
         return rec_T1, recon_K_T1, rec_T2, recon_K_T2
 

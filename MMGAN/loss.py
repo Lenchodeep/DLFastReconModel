@@ -55,6 +55,19 @@ class Loss():
         real_loss,fake_loss = self.disc_adver_loss(D_real,D_fake)
         return real_loss,fake_loss, 0.5*(real_loss + fake_loss)
 
+    def calc_gen_loss_single(self, T2img_tar, T2img_pred, T2K_tar, T2K_pred, D_fake=None):
+        ssimloss_T2 = self.ssimLoss_T2(T2img_tar, T2img_pred)
+        imgloss_T2 = self.ImL1Loss_T2(T2img_tar, T2img_pred)
+        kloss_T2 = self.KL1Loss_T2(T2K_tar, T2K_pred)
+        if D_fake is not None:  
+            advLoss = self.gen_adver_loss(D_fake)
+        else:
+            advLoss = 0
+        fullLoss = self.alpha*(kloss_T2)\
+                +(1-self.alpha)*(1000* imgloss_T2) + self.Adv_weight*advLoss + ssimloss_T2
+        return fullLoss, imgloss_T2, kloss_T2, ssimloss_T2, advLoss
+
+
     def calc_gen_loss(self, T1img_tar, T2img_tar, T1img_pred, T2img_pred, 
                                     T1K_tar, T2K_tar,T1K_pred, T2K_pred, D_fake=None):
 

@@ -31,8 +31,8 @@ ssimWeight: 1
 
 imageDataDir : "E:/FastMRI/miniBatch/"                                                                                                                             ## the path of the train datas that used
 mask_path: "D:/datas/masks/radial/radial_30.pickle" 
-tb_dir: "./tensorboard/singleModal/"
-output_dir: "./checkPoint/singleModal/"
+tb_dir: "./tensorboard/radial30/"
+output_dir: "./checkPoint/radial30/"
 
-predModelPath: "./checkPoint/multiDTrain/radial30/bestPsnr/Best_PSNR_epoch.pth"
+predModelPath: "E:/DLCode/DLFastReconModel/MANET/checkPoint/radial30/Best_CP_epoch.pth"
 predictDir: "E:/FastMRI/test"
