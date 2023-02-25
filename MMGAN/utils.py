@@ -26,6 +26,19 @@ def output2complex2(im_tensor, isZeroToOne = False):
     
     return im_tensor
 
+def output2complex(im_tensor, isZeroToOne = False):
+    '''
+    param: im_tensor : [B, 2, W, H]
+    return : [B,W,H] complex value
+    '''
+    ############## revert each channel to [0,1.] range
+    if not isZeroToOne:
+        im_tensor = revert_scale(im_tensor)
+    # 2 channel to complex
+    im_tensor = torch.view_as_complex(im_tensor.permute(0, 2, 3, 1).contiguous())
+    
+    return im_tensor
+    
 def revert_scale(im_tensor, a=2., b=-1.):
     '''
     param: im_tensor : [B, 2, W, H]
