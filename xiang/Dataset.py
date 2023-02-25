@@ -130,9 +130,7 @@ class FastMRIDataset(Dataset):
         masked_Kspace = kspace*self.masks[:, :, slice_num]
 
         masked_img = self.ifft2((masked_Kspace[0,:,:]+1j*masked_Kspace[1,:,:]))
-        # if self.fillNoise:
-        #     masked_Kspace += np.random.uniform(low=self.minmax_noise_val[0], high=self.minmax_noise_val[1],
-        #                                     size=masked_Kspace.shape)*self.maskNot
+
         return masked_Kspace, kspace, image, masked_img
 
     def __getitem__(self, i):
@@ -342,150 +340,7 @@ class BraTSDataset(Dataset):
             }
 
 
-class FastMRIDatasetRefineGan(Dataset):
-    '''
-        The data range is 0-1
-    '''
-    def __init__(self, args, isTrain = True, transform = None):
-        super().__init__()
-        self.args = args
-        self.istrain = isTrain        
-        self.imageSize = args.imgSize       
-        self.num_input_slices = args.num_input_slices  
 
-        if self.istrain:
-            self.dataDir = path.join(args.imageDataDir, "train/")
-        else:
-            self.dataDir = path.join(args.imageDataDir, "val/")
-      
-        self.transform = transform
-        
-        if self.istrain:
-            self.data = pd.read_csv("./data/MiniFastMRI/singlecoil_train_split_less.csv")
-        else:
-            self.data = pd.read_csv("./data/MiniFastMRI/singlecoil_val_split_less.csv")
-
-        PDWIList =  self.data['PDWI']
-        FSPDWIList =  self.data['FSPDWI']
-        #make an image id's list
-        self.ids = list()
-        
-        for idx in range(len(PDWIList)):
-            try:
-                full_file_path = path.join(self.dataDir, PDWIList[idx]+'.hdf5')
-                with h5py.File(full_file_path, 'r') as f:
-                    num_slice = f['reconstruction_rss'].shape[0]
-
-                if num_slice < self.args.slice_range[1]:
-                    continue
-
-                for slice in range(self.args.slice_range[0], self.args.slice_range[1]):
-                    self.ids.append((PDWIList[idx], FSPDWIList[idx], slice))
-            except:
-                continue
-        # get the data lenth
-        self.len = len(self.ids)
-        if self.istrain:
-            logging.info(f'Creating training datasets with {len(self.ids)} examples')
-        else:
-            logging.info(f'Creating val dataset with {len(self.ids)} examples')
-
-        mask_path = args.mask_path
-        with open(mask_path, 'rb') as pickle_file:
-            masks_dictionary = pickle.load(pickle_file)
-       
-        ## shift the mask instead of shift the kspace image
-        self.mask = torch.fft.fftshift(torch.from_numpy(masks_dictionary['mask1']))
-        self.maskNot = 1-self.mask
-        
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, i):
-        ## get the imageA
-        PDWIFileName, FSPDWIFileName, slice_num = self.ids[i]
-        PDWIFilePath =  path.join(self.dataDir,PDWIFileName + '.hdf5')
-        FSPDWIFilePath = path.join(self.dataDir,FSPDWIFileName + '.hdf5')
-
-        with h5py.File(PDWIFilePath, 'r') as f, h5py.File(FSPDWIFilePath, 'r') as s:
-            # add = int(self.num_input_slices / 2)  ## add controls the slices range
-            PDWIimgs = f['reconstruction_rss'][slice_num, :, :]
-            FSPDWIimgs = s['reconstruction_rss'][slice_num, :, :]
-            PDWIimgs = self.image_regular(self.cropCenter(PDWIimgs))
-            FSPDWIimgs = self.image_regular(self.cropCenter(FSPDWIimgs))
-
-            ## if transform using the transform
-            if self.transform:
-                PDWIimgs = self.transform(PDWIimgs)
-            if self.transform:
-                FSPDWIimgs = self.transform(FSPDWIimgs)
-
-
-            PDWIimgs = PDWIimgs[..., np.newaxis]
-            FSPDWIimgs = FSPDWIimgs[..., np.newaxis]
-
-            PDWIimgs = np.transpose(PDWIimgs, (2,0,1))
-            FSPDWIimgs = np.transpose(FSPDWIimgs, (2,0,1))
-
-            if self.args.isZeroToOne:
-                PDWIimgs = (PDWIimgs[0] - (0 + 0j)) 
-                FSPDWIimgs = (FSPDWIimgs[0] - (0 + 0j)) 
-            else:
-                PDWIimgs = (PDWIimgs[0] - (0.5 + 0.5j)) * 2.0
-                FSPDWIimgs = (FSPDWIimgs[0] - (0.5 + 0.5j)) * 2.0
-
-            PDWIimgs = torch.from_numpy(PDWIimgs)
-            FSPDWIimgs = torch.from_numpy(FSPDWIimgs)
-            # generate zero-filled image x_und, k_und, k
-            masked_PDWIimg, masked_PDWIkspace, full_PDWIkspace = self.undersample(PDWIimgs, self.mask)
-            masked_FSPDWIimg, masked_FSPDWIkspace, full_FSPDWIkspace = self.undersample(FSPDWIimgs, self.mask)
-
-            ########################## complex to 2 channel ##########################
-            reference_img= torch.view_as_real(PDWIimgs).permute(2, 0, 1).contiguous()
-            reference_masked_img = torch.view_as_real(masked_PDWIimg).permute(2, 0, 1).contiguous()
-            reference_masked_Kspace = torch.view_as_real(masked_PDWIkspace).permute(2, 0, 1).contiguous()
-            target_img = torch.view_as_real(FSPDWIimgs).permute(2, 0, 1).contiguous()
-            target_masked_img = torch.view_as_real(masked_FSPDWIimg).permute(2, 0, 1).contiguous()
-            masked_Kspaces = torch.view_as_real(masked_FSPDWIkspace).permute(2, 0, 1).contiguous()
-            mask = torch.view_as_real(self.mask * (1. + 1.j)).permute(2, 0, 1).contiguous()
-
-        return {
-            "refer_img": reference_img,
-            "refer_masked_K":reference_masked_Kspace,
-            "refer_masked_img": reference_masked_img,
-            "target_img": target_img,
-            "target_masked_img": target_masked_img,
-            "masked_K":masked_Kspaces,
-            'mask': mask
-            }
-        
-    def cropCenter(self, image):
-        if image.shape[0] == self.imageSize:
-            return image
-        if image.shape[0] % 2 == 1:
-            image = image[:-1, :-1]
-        crop = int((image.shape[0] - self.imageSize)/2)
-        image = image[crop:-crop, crop:-crop]
-        return image
-
-    def image_regular(self, image):
-        image = (image - np.min(image))/(np.max(image)-np.min(image))
-        return image
-
-    def undersample(self, image, mask):
-        k = (torch.fft.fft2(image))
-        k_und = mask*k
-        x_und = torch.fft.ifft2((k_und))
-        return x_und, k_und, k
-
-    def fftshift(self, k):
-        S = int(k.shape[1]/2)
-        img2 = torch.zeros_like(k)
-        img2[ :S, :S] = k[ S:, S:]
-        img2[ S:, S:] = k[ :S, :S]
-        img2[ :S, S:] = k[ S:, :S]
-        img2[ S:, :S] = k[ :S, S:]
-        return img2
 from skimage.io import imsave
 
 def main():
@@ -493,7 +348,7 @@ def main():
         data = yaml.load(f, Loader=yaml.FullLoader)
     args = SimpleNamespace(**data)
 
-    dataset = FastMRIDatasetRefineGan(args=args, isTrain = False,transform = None)
+    dataset = FastMRIDataset(args=args, istrain = False,transform = None)
     dataloader = DataLoader(dataset , batch_size=1 , shuffle=True , num_workers=0 , drop_last=True)
 
     data_iter = iter(dataloader)
@@ -503,30 +358,30 @@ def main():
     target_img = data["target_img"]
     refer_masked_img = data["refer_masked_img"]
     refer_img = data["refer_img"]
-    masked_img = torch.abs(torch.complex(masked_img[:,0,:,:], masked_img[:,1,:,:]))
+    # masked_img = torch.abs(torch.complex(masked_img[:,0,:,:], masked_img[:,1,:,:]))
+    # masked_img = masked_img.detach().numpy().squeeze()
+    # target_img = torch.abs(torch.complex(target_img[:,0,:,:], target_img[:,1,:,:]))
+    # target_img = target_img.detach().numpy().squeeze()
+    # refer_img = torch.abs(torch.complex(refer_img[:,0,:,:], refer_img[:,1,:,:]))
+    # refer_img = refer_img.detach().numpy().squeeze()
+    # refer_masked_img = torch.abs(torch.complex(refer_masked_img[:,0,:,:], refer_masked_img[:,1,:,:]))
+    # refer_masked_img = refer_masked_img.detach().numpy().squeeze()
+
     masked_img = masked_img.detach().numpy().squeeze()
-    target_img = torch.abs(torch.complex(target_img[:,0,:,:], target_img[:,1,:,:]))
     target_img = target_img.detach().numpy().squeeze()
-    refer_img = torch.abs(torch.complex(refer_img[:,0,:,:], refer_img[:,1,:,:]))
-    refer_img = refer_img.detach().numpy().squeeze()
-    refer_masked_img = torch.abs(torch.complex(refer_masked_img[:,0,:,:], refer_masked_img[:,1,:,:]))
     refer_masked_img = refer_masked_img.detach().numpy().squeeze()
-
-    print(refer_masked_img.shape, refer_masked_img.max(), refer_masked_img.min())
-    print(refer_img.shape, refer_img.max(), refer_img.min())
-
-    # imsave("E:/FastMRI/gaussian20.png", masked_img)
+    refer_img = refer_img.detach().numpy().squeeze()
 
     plt.figure()
-    plt.imshow(masked_img,plt.cm.gray)
+    plt.imshow(refer_masked_img,plt.cm.gray)
     plt.title("mask_kimg2")
     plt.figure()
-    plt.imshow(target_img,plt.cm.gray)
+    plt.imshow(refer_img,plt.cm.gray)
     plt.title("tar_kimg2")
     plt.show()
 
 if __name__ == "__main__":
-    main()
-    # pass
+    # main()
+    pass
 
 

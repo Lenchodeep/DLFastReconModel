@@ -102,7 +102,7 @@ def train(args):
             epoch_D_Loss = 0
             epoch_G_Loss = 0
             epoch_Img_Loss_T2 = 0
-            epoch_K_Loss_T2 = 0
+            epoch_Img_Loss_T2_mid = 0
 
             epoch_SSIM = 0
             epoch_PSNR = 0
@@ -111,7 +111,7 @@ def train(args):
             ## val metrics
             val_FullLoss = 0
             val_Img_Loss_T2 = 0
-            val_K_Loss_T2 = 0
+            val_Img_Loss_T2_mid = 0
 
             val_SSIM = 0
             val_PSNR = 0
@@ -121,14 +121,15 @@ def train(args):
                 '''Trainging stage'''
                 for step,batch in enumerate(train_loader):
                     ## BATCH DATA
-                    T2_masked_k = batch['masked_K'].to(device = args.device, dtype = torch.float32)
+                    T2_masked_img = batch['target_masked_img'].to(device = args.device, dtype = torch.float32)
+                    # T2_masked_k = batch['masked_K'].to(device = args.device, dtype = torch.float32)
                     T2_target_k = batch['target_K'].to(device = args.device, dtype = torch.float32)
                     T2_target_img = batch['target_img'].to(device = args.device, dtype = torch.float32)
 
 
 
                     #forward G
-                    rec_img_T2, rec_k_T2 = net_G(T2_masked_k)
+                    rec_img_T2, rec_mid_T2 = net_G(T2_masked_img, T2_target_k)
                    
                     # get the D out
                     real_D_example = T2_target_img.detach()  #不需要梯度    
@@ -142,9 +143,9 @@ def train(args):
 
 
                     #calculate G loss
-                    FullLoss,  IMloss_T2,  KLoss_T2, SSIMLoss_T2, advloss\
+                    FullLoss,  IMloss_T2, IMloss_T2_mid, SSIMLoss_T2, SSIMLoss_T2_mid, advloss\
                      = loss.calc_gen_loss_single(T2_target_img, rec_img_T2,\
-                                         T2_target_k, rec_k_T2, D_fake_pred)
+                                         rec_mid_T2, D_fake_pred)
 
                     D_optimizer.zero_grad()
                     DLoss.backward()
@@ -170,10 +171,9 @@ def train(args):
                     # update fullLoss
                     epoch_Full_Loss += FullLoss.item()
                     epoch_Img_Loss_T2 += IMloss_T2.item()
-                    epoch_K_Loss_T2 += KLoss_T2.item()
+                    epoch_Img_Loss_T2_mid += IMloss_T2_mid.item()
                     epoch_D_Loss += advloss.item()
                     epoch_G_Loss += DLoss.item()
-                    
                     epoch_PSNR += psnr
                     epoch_NMSE += nmse
                     epoch_SSIM += ssim
@@ -181,7 +181,7 @@ def train(args):
                     progress += 100*T2_target_k.shape[0]/len(train_dataset)
                     
                     pbar.set_postfix(**{'FullLoss': FullLoss.item(), 'Gadvloss: ': advloss.item(), 'Dadvloss: ': DLoss.item(),'ImT2': IMloss_T2.item(),
-                                    'KLoss_T2': KLoss_T2.item(),'PSNR: ' : psnr, 'NMSE: ':nmse, 
+                                    'ImT2mid': IMloss_T2_mid.item(),'PSNR: ' : psnr, 'NMSE: ':nmse, 
                                     'SSIM: ':ssim,  'Prctg of train set': progress})
 
                     pbar.update(T2_target_k.shape[0])# current batch size
@@ -192,16 +192,17 @@ def train(args):
                 net_D.eval()
                 n_val = len(val_loader)  # number of batch
                 for batch in tqdm(val_loader):
-                    val_T2_masked_k = batch['masked_K'].to(device = args.device, dtype = torch.float32)
+                    val_T2_masked_img = batch['target_masked_img'].to(device = args.device, dtype = torch.float32)
+                    # val_T2_masked_k = batch['masked_K'].to(device = args.device, dtype = torch.float32)
                     val_T2_target_k = batch['target_K'].to(device = args.device, dtype = torch.float32)
                     val_T2_target_img = batch['target_img'].to(device = args.device, dtype = torch.float32)
                    
                     with torch.no_grad():
-                         val_rec_img_T2, val_rec_k_T2 = net_G(val_T2_masked_k)
+                         val_rec_img_T2, val_rec_mid_T2 = net_G(val_T2_masked_img, val_T2_target_k)
 
-                    val_FullLoss, val_IMloss_T2, val_KLoss_T2, val_SSIMLoss_T2, val_advLoss\
+                    val_FullLoss, val_IMloss_T2, val_IMloss_T2_mid, val_SSIMLoss_T2,val_SSIMLoss_T2_mid, val_advLoss\
                      = loss.calc_gen_loss_single(val_T2_target_img, val_rec_img_T2,\
-                                            val_T2_target_k,val_rec_k_T2, None)
+                                            val_rec_mid_T2, None)
 
                     val_target_img_detach = val_T2_target_img.detach().cpu().numpy()
                     val_rec_img_detach = val_rec_img_T2.detach().cpu().numpy()
@@ -216,14 +217,14 @@ def train(args):
 
                     val_FullLoss += val_FullLoss.item()
                     val_Img_Loss_T2 += val_IMloss_T2.item()
-                    val_K_Loss_T2 +=  val_KLoss_T2.item()
+                    val_Img_Loss_T2_mid +=  val_IMloss_T2_mid.item()
 
                     val_PSNR += val_psnr
                     val_NMSE += val_nmse
                     val_SSIM += val_ssim
 
-                logging.info('Validation full score: {}, IMT2Loss: {}, KLossT2: {}, PSNR: {}, SSIM: {}, NMSE: {},  '
-                         .format(val_FullLoss/n_val,  val_Img_Loss_T2/n_val, val_K_Loss_T2/ n_val, 
+                logging.info('Validation full score: {}, IMT2Loss: {}, IMT2LossMid: {}, PSNR: {}, SSIM: {}, NMSE: {},  '
+                         .format(val_FullLoss/n_val,  val_Img_Loss_T2/n_val, val_Img_Loss_T2_mid/ n_val, 
                                 val_PSNR/ n_val, val_SSIM/n_val, val_NMSE/n_val))
                 # Schedular update
                 G_scheduler.step(val_FullLoss)
@@ -262,7 +263,7 @@ def train(args):
             if args.tb_write_loss:
                 writer.add_scalar('train/FullLoss', epoch_Full_Loss / len(train_loader), epoch)
                 writer.add_scalar('train/ImLossT2', epoch_Img_Loss_T2 / len(train_loader), epoch)
-                writer.add_scalar('train/KspaceT2', epoch_K_Loss_T2 / len(train_loader), epoch)
+                writer.add_scalar('train/ImLossT2_mid', epoch_Img_Loss_T2_mid / len(train_loader), epoch)
                 writer.add_scalar('train/SSIM', epoch_SSIM / len(train_loader), epoch)
                 writer.add_scalar('train/PSNR', epoch_PSNR / len(train_loader), epoch)
                 writer.add_scalar('train/NMSE', epoch_NMSE / len(train_loader), epoch)
@@ -272,7 +273,7 @@ def train(args):
 
                 writer.add_scalar('validation/FullLoss', val_FullLoss / len(val_loader), epoch)
                 writer.add_scalar('validation/ImLossT2', val_Img_Loss_T2 / len(val_loader), epoch)
-                writer.add_scalar('validation/KspaceT2', val_K_Loss_T2 / len(val_loader), epoch)
+                writer.add_scalar('validation/ImLossT2Mid', val_Img_Loss_T2_mid / len(val_loader), epoch)
                 writer.add_scalar('validation/SSIM', val_SSIM / len(val_loader), epoch)
                 writer.add_scalar('validation/PSNR', val_PSNR / len(val_loader), epoch)
                 writer.add_scalar('validation/NMSE', val_nmse / len(val_loader), epoch)

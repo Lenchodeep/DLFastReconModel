@@ -70,14 +70,14 @@ class BasicBlockDown(nn.Module):
 
     def forward(self, x):
         ##first conv adjust the channel nums
-        out1 = F.leaky_relu(self.bn1(self.conv1(x)), 0.1)
+        out1 = F.leaky_relu(self.bn1(self.conv1(x)), 0.2)
 
         ##second conv
-        out2 = F.leaky_relu(self.bn2(self.conv2(out1)), 0.1)
+        out2 = F.leaky_relu(self.bn2(self.conv2(out1)), 0.2)
 
         ##third conv
 
-        out3 = F.leaky_relu(self.bn3(self.conv3(out2)), 0.1)
+        out3 = F.leaky_relu(self.bn3(self.conv3(out2)), 0.2)
         ## output including a residual connection
         return out3+out1
 
@@ -92,9 +92,9 @@ class BasicBlockUp(nn.Module):
 
     def forward(self,x):
         ##first conv
-        out1 = F.leaky_relu(self.bn1(self.conv1(x)), 0.1)
+        out1 = F.leaky_relu(self.bn1(self.conv1(x)), 0.2)
         ##second conv
-        out2 = F.leaky_relu(self.bn2(self.conv2(out1)), 0.1)
+        out2 = F.leaky_relu(self.bn2(self.conv2(out1)), 0.2)
         ## output including a residual connection
         return x+out2
 
@@ -141,7 +141,42 @@ class DRDB_Conv(nn.Module):
         out = self.relu(out)
         return torch.cat((input, out), dim=1)        
 
+class DenseBlock(nn.Module):
+    def __init__(self, channels):
+        super(DenseBlock, self).__init__()
 
+        self.conv = nn.Sequential(
+            DenseConv(channels*1, channels, k_size=3),
+            DenseConv(channels*2, channels, k_size=3),
+            DenseConv(channels*3, channels, k_size=3),
+            DenseConv(channels*4, channels, k_size=3)
+        )
+
+        self.outConv = nn.Conv2d(channels*5, channels, kernel_size=1)
+        self.bn = nn.BatchNorm2d(channels)
+        self.relu = nn.LeakyReLU(0.2, True)
+
+    def forward(self, input):
+        
+        fusion_out = self.conv(input)
+        out = self.relu(self.bn(self.outConv(fusion_out)))
+
+        return out
+        
+class DenseConv(nn.Module):
+    def __init__(self,inchannels, outchannels, k_size = 3, dilate=1, stride = 1):
+        super(DenseConv, self).__init__()
+   
+        self.conv = DeepWiseConv(inchannels, outchannels, kernel_size=k_size, padding=dilate*(k_size-1)//2
+                        , dilation=dilate, stride=stride)
+        self.relu = nn.LeakyReLU()
+        self.bn = nn.BatchNorm2d(outchannels)
+
+    def forward(self, input):
+        out = self.conv(input)
+        out = self.bn(out)
+        out = self.relu(out)
+        return torch.cat((input, out), dim=1)   
 ############################ segnext part ################################################
 class MSCA(nn.Module):
 
@@ -201,3 +236,20 @@ class BlockMSCA(nn.Module):
         out = self.sig(x)
 
         return out
+
+
+class Dataconsistency(nn.Module):
+    def __init__(self):
+        super(Dataconsistency, self).__init__()
+
+    def forward(self, x_rec, mask, k_un, norm='ortho'):
+        x_rec = x_rec.permute(0, 2, 3, 1)
+        mask = mask.permute(0, 2, 3, 1)
+        k_un = k_un.permute(0, 2, 3, 1)
+        k_rec = torch.fft.fft2(torch.view_as_complex(x_rec.contiguous()),dim=(1,2))
+        k_rec = torch.view_as_real(k_rec)
+        k_out = k_rec + (k_un - k_rec) * mask
+        k_out = torch.view_as_complex(k_out)
+        x_out = torch.view_as_real(torch.fft.ifft2(k_out,dim=(1,2)))
+        x_out = x_out.permute(0, 3, 1, 2)
+        return x_out

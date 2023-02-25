@@ -7,7 +7,7 @@ lrgamma : 0.5
 
 fillnoise: 0
 minmax_noise_val: [-0.01, 0.01]
-slice_range : [20,120]
+slice_range : [20,30]
 num_filters: 64
 
 batch_size : 2

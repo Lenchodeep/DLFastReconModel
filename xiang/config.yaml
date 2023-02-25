@@ -6,8 +6,8 @@ imgSize: 256
 filters: 32
 ## basic setting
 device: "cuda"
-epochs: 50
-batch_size: 2
+epochs: 100
+batch_size: 4
 lr: 0.0001
 weight_clip: 0.01
 ## resume train
@@ -22,19 +22,13 @@ tb_write_image: 1
 ## save options
 save_step: 5
 testDC: 0
-###################################loss weights#############################
-alpha: 0.6
-beta: 0.6
-rate: 100
-advWeight: 0.1
-ssimWeight: 1
-critic: 9
+
 ################################## paths ###################################
 
 imageDataDir : "E:/FastMRI/miniBatch/"                                                                                                                             ## the path of the train datas that used
 mask_path: "D:/datas/masks/radial/radial_30.pickle" 
-tb_dir: "./tensorboard/directModal/radial30"
-output_dir: "./checkPoint/directModal/radial30"
+tb_dir: "./tensorboard/radial30/"
+output_dir: "./checkPoint/radial30/"
 
 predModelPath: "./checkPoint/multiDTrain/radial30/bestPsnr/Best_PSNR_epoch.pth"
 predictDir: "E:/FastMRI/test"

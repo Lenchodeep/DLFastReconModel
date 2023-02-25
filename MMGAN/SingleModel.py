@@ -10,6 +10,25 @@ import matplotlib.pyplot as plt
 
 from CommonPart import *
 
+class Dataconsistency(nn.Module):
+    def __init__(self):
+        super(Dataconsistency, self).__init__()
+
+    def forward(self, x_rec, mask, k_un, norm='ortho'):
+        x_rec = x_rec.permute(0, 2, 3, 1)
+        mask = mask.permute(0, 2, 3, 1)
+        k_un = k_un.permute(0, 2, 3, 1)
+        k_rec = torch.fft.fft2(torch.view_as_complex(x_rec.contiguous()),dim=(1,2))
+        k_rec = torch.view_as_real(k_rec)
+        k_out = k_rec + (k_un - k_rec) * mask
+        k_out = torch.view_as_complex(k_out)
+        x_out = torch.view_as_real(torch.fft.ifft2(k_out,dim=(1,2)))
+        x_out = x_out.permute(0, 3, 1, 2)
+        return x_out
+
+
+
+
 class SingleUnet(nn.Module):
     def __init__(self, in_chan, out_chan, filters):
         super(SingleUnet, self).__init__()
@@ -36,7 +55,7 @@ class SingleUnet(nn.Module):
         self.u1 = BasicBlockUp(int(filters/2))   
 
         self.outconv = nn.Conv2d(int(filters/2),out_chan, 1)
-
+        self.ac = nn.Tanh()
     def forward(self, T2):
 
         T2_x1 = self.inconv(T2)
@@ -52,9 +71,9 @@ class SingleUnet(nn.Module):
         T2_3x = self.u2(self.up2(T2_2x,T2_y2))
         T2_4x = self.u1(self.up1(T2_3x,T2_y1))
 
-        out = self.outconv(T2_4x)
+        out = self.ac(self.outconv(T2_4x))
 
-        return out
+        return out +T2
 
 class SingleGenerator(nn.Module):
     def __init__(self, args):
@@ -62,73 +81,26 @@ class SingleGenerator(nn.Module):
 
         self.filters = args.filters
         self.device = args.device
-
+        self.args = args
         ## init the mask
-        mask_path = args.mask_path
-        with open(mask_path, 'rb') as pickle_file:
-            masks = pickle.load(pickle_file)
-        self.mask = torch.tensor(masks['mask1'] == 1, device=args.device)
-        self.maskNot = self.mask == 0
+        self.dc = Dataconsistency()
+        self.g0 = SingleUnet(2,2,self.filters)
+        self.g1 = SingleUnet(2,2,self.filters)
 
-        self.KUnet = SingleUnet(2,2,self.filters)
-        self.IUnet = SingleUnet(1,1,self.filters)
+    def forward(self, T2masked, Kspace, mask):
+        reconimg = self.g0(T2masked)
 
-    def fftshift(self, img):
-        '''
-            4d tensor FFT operation
-        '''
-        S = int(img.shape[3]/2)
-        img2 = torch.zeros_like(img)
-        img2[:, :, :S, :S] = img[:, :, S:, S:]
-        img2[:, :, S:, S:] = img[:, :, :S, :S]
-        img2[:, :, :S, S:] = img[:, :, S:, :S]
-        img2[:, :, S:, :S] = img[:, :, :S, S:]
-        return img2
-    
-    def FT(self, image):
-        '''
-            Fourier operation 
-        '''
+        rec_mid_img = self.dc(reconimg, mask, Kspace)
 
-        kspace_cplx = self.fftshift(torch.fft.fft2(image, dim=(2,3)))
-        return kspace_cplx
+        rec_img = self.g1(rec_mid_img)
 
-    def inverseFT(self, Kspace):
-        """The input Kspace has two channels(real and img)"""
-        Kspace = Kspace.permute(0, 2, 3, 1)
-        img_cmplx = torch.fft.ifft2(Kspace, dim=(1,2))
-        img = torch.absolute(img_cmplx[:,:,:,0]+ 1j*img_cmplx[:,:,:,1])
-        img = img[:, None, :, :]
-        return img
+        final_rec_img = self.dc(rec_img, mask, Kspace)
 
-    def KDC_layer(self, rec_K, und_K):
-        '''
-            K data consistency layer
-        '''
-        rec_Kspace = (self.mask*torch.complex(und_K[:, 0, :, :], und_K[:, 1, :, :]) + self.maskNot*torch.complex(rec_K[:, 0, :, :], rec_K[:, 1, :, :]))[:, None, :, :]
-        final_rec =torch.absolute(torch.fft.ifft2(self.fftshift(rec_Kspace),dim=(2,3)))
-
-        return final_rec, rec_Kspace
-    
-    def IDC_layer(self, rec_Img, und_K):
-        und_k_cplx = torch.complex(und_K[:,0,:,:], und_K[:,1,:,:])[:,None,:,:] 
-        rec_k = self.FT(rec_Img)
-        final_k = (torch.mul(self.mask, und_k_cplx) + torch.mul(self.maskNot, rec_k))
-        final_rec  =  torch.absolute(torch.fft.ifft2(self.fftshift(final_k), dim=(2,3)))
-
-        return final_rec
-
-    def forward(self, Kspace):
-        reconK = self.KUnet(Kspace)
-
-        rec_mid_img , rec_mid_k = self.KDC_layer(reconK, Kspace)
-
-        rec_img = self.IUnet(rec_mid_img)
-
-        final_rec_img = self.IDC_layer(rec_img, Kspace)
-
-        return final_rec_img, reconK
-
+        if self.args.isZeroToOne:
+            final_rec_img = torch.clamp(final_rec_img,0,1)
+        else:
+            final_rec_img = torch.clamp(final_rec_img,-1,1)
+        return reconimg, rec_mid_img, rec_img, final_rec_img
 ################################ discriminator ####################################
 class SepDown(nn.Module):
     def __init__(self, inchannels, outchannels):
@@ -214,3 +186,41 @@ class Discriminator(nn.Module):
         return self.model(input)
 
 
+class Discriminator1(nn.Module):
+    
+    def __init__(self, ndf):
+        super(Discriminator1, self).__init__()
+        filters = ndf
+        self.inconv = nn.Conv2d(2,int(filters/2),1)
+
+        self.d_1 = BasicBlockDown(int(filters/2), filters)
+        self.down_1 = DownSample()
+        self.d_2 = BasicBlockDown(filters, filters*2)
+        self.down_2 = DownSample()
+        self.d_3 = BasicBlockDown(filters*2, filters*4)
+        self.down_3 = DownSample()
+        self.d_4 = BasicBlockDown(filters*4, filters*8)
+        self.down_4 = DownSample()
+        self.bottom = DenseBlock(filters*8)
+        self.ret = nn.Conv2d(filters*8, 1, kernel_size=4, stride=1, padding=2)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                nn.init.trunc_normal_(m.weight, mean=0, std=0.02, a=-0.04, b=0.04)
+                if hasattr(m, 'bias') and m.bias is not None:
+                    nn.init.constant_(m.bias.data, 0.0)
+            if isinstance(m, nn.BatchNorm2d):
+                nn.init.uniform_(m.weight, a=-0.05, b=0.05)
+                nn.init.constant_(m.bias, 0)
+
+        
+    def forward(self, x):
+        input = self.inconv(x)
+        x_e1,_ = self.down_1(self.d_1(input))
+        x_e2,_ = self.down_2(self.d_2(x_e1))
+        x_e3,_ = self.down_3(self.d_3(x_e2))
+        x_e4,_ = self.down_4(self.d_4(x_e3))
+        x_e4 = self.bottom(x_e4)
+        ret = self.ret(x_e4)
+
+        return ret

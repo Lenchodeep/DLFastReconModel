@@ -2,7 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pickle
-import matplotlib.pyplot as plt
+class Dataconsistency(nn.Module):
+    def __init__(self):
+        super(Dataconsistency, self).__init__()
+
+    def forward(self, x_rec, mask, k_un, norm='ortho'):
+        x_rec = x_rec.permute(0, 2, 3, 1)
+        mask = mask.permute(0, 2, 3, 1)
+        k_un = k_un.permute(0, 2, 3, 1)
+        k_rec = torch.fft.fft2(torch.view_as_complex(x_rec.contiguous()),dim=(1,2))
+        k_rec = torch.view_as_real(k_rec)
+        k_out = k_rec + (k_un - k_rec) * mask
+        k_out = torch.view_as_complex(k_out)
+        x_out = torch.view_as_real(torch.fft.ifft2(k_out,dim=(1,2)))
+        x_out = x_out.permute(0, 3, 1, 2)
+        return x_out
 
 class Single_level_densenet(nn.Module): 
     def __init__(self,filters, num_conv = 4):
@@ -290,7 +304,7 @@ class Dense_Unet_img(nn.Module):
     def __init__(self, in_chan, out_chan, filters, num_conv = 4):  
         super(Dense_Unet_img, self).__init__()
         self.conv1T1 = nn.Conv2d(in_chan,filters,1)
-        self.conv1T2 = nn.Conv2d(2,filters,1)
+        self.conv1T2 = nn.Conv2d(2*in_chan,filters,1)
 
         self.dT1_1 = Single_level_densenet_img(filters,num_conv )
         self.downT1_1 = Down_sample_img()
@@ -332,7 +346,7 @@ class Dense_Unet_img(nn.Module):
         self.u1_T2 = Single_level_densenet_img(filters,num_conv )
 
         self.outconvT1 = nn.Conv2d(filters,out_chan, 1)
-        self.outconvT2 = nn.Conv2d(64,out_chan, 1)
+        self.outconvT2 = nn.Conv2d(filters,out_chan, 1)
         #Components of DEM module
         self.atten_depth_channel_0=ChannelAttention_img(64)
         self.atten_depth_channel_1=ChannelAttention_img(64)
@@ -555,82 +569,33 @@ class SpatialAttention_img(nn.Module):
 class Generator(nn.Module):
     def __init__(self,args):
         super(Generator,self).__init__()
-        self.KUnet = Dense_Unet_img(1,1,64,4)
-        self.IUnet = Dense_Unet_img(1,1,64,4)
+        self.g0 = Dense_Unet_img(2,2,32,4)
+        self.g1 = Dense_Unet_img(2,2,32,4)
 
         self.filters = args.filters
         self.device = args.device
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                nn.init.trunc_normal_(m.weight, mean=0, std=0.02, a=-0.04, b=0.04)
+                if hasattr(m, 'bias') and m.bias is not None:
+                    nn.init.constant_(m.bias.data, 0.0)
+            if isinstance(m, nn.BatchNorm2d):
+                nn.init.uniform_(m.weight, a=-0.05, b=0.05)
+                nn.init.constant_(m.bias, 0)
+   
 
-        ## init the mask
-        mask_path = args.mask_path
-        with open(mask_path, 'rb') as pickle_file:
-            masks = pickle.load(pickle_file)
-        self.mask = torch.tensor(masks['mask1'] == 1, device=args.device)
-        self.maskNot = self.mask == 0
+    def forward(self, x_un_T1, k_un_T1, x_un_T2, k_un_T2, mask):
+ 
+        x_rec0_T1, x_rec0_T2 = self.g0(x_un_T1, x_un_T2)
+        x_dc0_T1 = self.dc(x_rec0_T1, mask, k_un_T1)
+        x_dc0_T2 = self.dc(x_rec0_T2, mask, k_un_T2)
 
-    # def inverseFT(self, Kspace):
-    #     """The input Kspace has two channels(real and img)"""
-    #     Kspace = Kspace.permute(0, 2, 3, 1)
-    #     img_cmplx = torch.fft.ifft2(Kspace, dim=(1,2))
-    #     img = torch.sqrt(img_cmplx[:, :, :, 0]**2 + img_cmplx[:, :, :, 1]**2)
-    #     img = img[:, None, :, :]
-    #     return img
-    def fftshift(self, img):
-        '''
-            4d tensor FFT operation
-        '''
-        S = int(img.shape[3]/2)
-        img2 = torch.zeros_like(img)
-        img2[:, :, :S, :S] = img[:, :, S:, S:]
-        img2[:, :, S:, S:] = img[:, :, :S, :S]
-        img2[:, :, :S, S:] = img[:, :, S:, :S]
-        img2[:, :, S:, :S] = img[:, :, :S, S:]
-        return img2
-    
-    def FT(self, image):
-        '''
-            Fourier operation 
-        '''
+        x_rec1_T1, x_rec1_T2 = self.g1(x_dc0_T1, x_dc0_T2)
+        x_dc1_T1 = self.dc(x_rec1_T1, mask, k_un_T1)
+        x_dc1_T2 = self.dc(x_rec1_T2, mask, k_un_T2)
 
-        kspace_cplx = self.fftshift(torch.fft.fft2(image, dim=(2,3)))
-        return kspace_cplx
+        x_dc1_T1 =  torch.clamp(x_dc1_T1, 0, 1)
+        x_dc1_T2 =  torch.clamp(x_dc1_T2, 0, 1)
 
-    def inverseFT(self, Kspace):
-        """The input Kspace has two channels(real and img)"""
-        Kspace = Kspace.permute(0, 2, 3, 1)
-        img_cmplx = torch.fft.ifft2(Kspace, dim=(1,2))
-        img = torch.absolute(img_cmplx[:,:,:,0]+ 1j*img_cmplx[:,:,:,1])
-        img = img[:, None, :, :]
-        return img
+        return x_rec0_T1, x_rec0_T2, x_dc0_T1, x_dc0_T2, x_rec1_T1, x_rec1_T2, x_dc1_T1, x_dc1_T2
 
-    # def KDC_layer(self, rec_K, und_K):
-    #     '''
-    #         K data consistency layer
-    #     '''
-    #     rec_Kspace = (self.mask*torch.complex(und_K[:, 0, :, :], und_K[:, 1, :, :]) + self.maskNot*torch.complex(rec_K[:, 0, :, :], rec_K[:, 1, :, :]))[:, None, :, :]
-    #     final_rec =torch.absolute(torch.fft.ifft2(self.fftshift(rec_Kspace),dim=(2,3)))
-
-    #     return final_rec, rec_Kspace
-    
-    def IDC_layer(self, rec_Img, und_K):
-        und_k_cplx = torch.complex(und_K[:,0,:,:], und_K[:,1,:,:])[:,None,:,:] 
-        rec_k = self.FT(rec_Img)
-        final_k = (torch.mul(self.mask, und_k_cplx) + torch.mul(self.maskNot, rec_k))
-        final_rec  =  torch.absolute(torch.fft.ifft2(self.fftshift(final_k), dim=(2,3)))
-
-        return final_rec
-
-    def forward(self, T1img, T2img, T1K, T2K):
-        recon_T1, recon_T2 = self.KUnet(T1img, T2img)
-
-        recon_mid_T1 = self.IDC_layer(recon_T1, T1K)
-        recon_mid_T2 = self.IDC_layer(recon_T2, T2K)
-
-        rec_T1, rec_T2 = self.IUnet(recon_mid_T1,recon_mid_T2)
-        rec_T1 = self.IDC_layer(rec_T1, T1K)
-        rec_T2 = self.IDC_layer(rec_T2, T2K)
-    
-        # rec_T1 = torch.clamp(F.tanh(rec_final_T1+recon_mid_T1), 0, 1)
-        # rec_T2 = torch.clamp(F.tanh(re_final_T2+recon_mid_T2), 0, 1)
-
-        return rec_T1, recon_mid_T1, rec_T2, recon_mid_T2

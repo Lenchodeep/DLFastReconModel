@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from MyDataset import FastMRIDataset, BraTSDataset
 from utils import *
 from MANet import Generator
+from MMGAN import ImgGenerator
 # from MANet import Generator
 from torch.utils.tensorboard import SummaryWriter
 

@@ -215,6 +215,7 @@ def main():
     image_b_und = np.squeeze(image_b_und)
 
     print(image_a_und.max(), image_a_und.min())
+    print(imagea.max(), imagea.min())
 
     plt.figure()
     plt.imshow(imagea,plt.cm.gray)
@@ -230,4 +231,4 @@ def main():
     plt.title("image_a_und")  
     plt.show()
 
-# main()
+main()

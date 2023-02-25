@@ -1,4 +1,5 @@
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 from os.path import splitext
 from os import listdir, path
 import torch
@@ -217,4 +218,4 @@ def main():
     plt.title("image_a_und")  
     plt.show()
 
-# main()
+main()

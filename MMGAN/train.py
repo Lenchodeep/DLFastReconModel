@@ -15,18 +15,16 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
 '''my modules'''
-from Models import Discriminator
+from Models import Discriminator, ImgGenerator
 from MyDataset import FastMRIDataset, BraTSDataset
 from loss import *
 from utils import *
-from MANet import Generator
 from torch.utils.tensorboard import SummaryWriter
 
 def train(args):
     '''Init the model'''
     ## generator
-    # net_G = Generator(args)
-    net_G = Generator()
+    net_G = ImgGenerator(args)
 
     G_optimizer = torch.optim.Adam(net_G.parameters(), lr = args.lr, betas = (0.5,0.999))
     G_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(G_optimizer, 'min', patience = 5, factor=0.1) ## min 表示当监控的量不在下降的时候，降低学习率， patience表示当性能在5个epoch后仍然不下降，降低学习率
