@@ -264,7 +264,7 @@ def multimodalTest(args, model, singleTrain = False):
                 rec_nmse = calcuNMSE(tar_T2, rec_T2, False)
                 zf_ssim = calculateSSIM(tar_T2, ZF_img, False)
                 zf_psnr = calculatePSNR(tar_T2, ZF_img, False)
-                zf_nmse = calcuNMSE(tar_T2, ZF_img, False)   
+                zf_nmse = calcuNMSE(tar_T2, ZF_img, False)      
 
                 psnr_list.append(rec_psnr)
                 ssim_list.append(rec_ssim)
@@ -280,7 +280,7 @@ def multimodalTest(args, model, singleTrain = False):
                            
             if args.visualize_images:
                 logging.info("Visualizing results for image , close to continue ...")
-                pltImages(ZF_imgs, rec_imgs, label_imgs,series_name =os.path.split(T2file)[1], args = args, sliceList=[10,15,20])
+                pltImages(ZF_imgs, rec_imgs, label_imgs,series_name =os.path.split(T2file)[1], args = args, sliceList=[10,13,15])
         ## final 
     psnrarray = np.array(psnr_list)
     ssimarray = np.array(ssim_list)
@@ -326,7 +326,7 @@ if __name__ == '__main__':
 
     logging.info(f"Using device {args.device}")
     logging.info("Loading model {}".format(args.predModelPath))
-    # model = DirectG(args)
-    model = SingleGenerator(args)
+    model = DirectG(args)
+    # model = SingleGenerator(args)
 
-    multimodalTest(args, model, True)
+    multimodalTest(args, model, False)

@@ -38,7 +38,7 @@ def output2complex(im_tensor, isZeroToOne = False):
     im_tensor = torch.view_as_complex(im_tensor.permute(0, 2, 3, 1).contiguous())
     
     return im_tensor
-    
+
 def revert_scale(im_tensor, a=2., b=-1.):
     '''
     param: im_tensor : [B, 2, W, H]
@@ -117,7 +117,7 @@ ROI_END_X = 130
 global ROI_END_Y
 ROI_END_Y = 150
 
-def pltImages(ZF_imgs, rec_imgs, label_imgs, series_name,isDc = True, sliceList = None, args = None, mask = None, savepng = True):
+def pltImages(ZF_imgs, rec_imgs, label_imgs, series_name,isDc = False, sliceList = None, args = None, mask = None, savepng = True):
     '''
         To plot the reconstruction image, original image, fold image and the sub image 
     '''
@@ -187,7 +187,8 @@ def pltImages(ZF_imgs, rec_imgs, label_imgs, series_name,isDc = True, sliceList 
 
         plot_path = os.path.join(args.predictResultPath ,series_name+'_recon'+"{}.png".format(slice))
         plt.savefig(plot_path, bbox_inches='tight')
-        plt.show()
+        # plt.show()
+        plt.close('all')  #避免内存泄漏
         if savepng:
             siglePngPath = os.path.join(args.predictResultPath, 'SplitImage')
             save_numpy_image_to_png(label, ZF_img, final_recon, diff_image,zf_diff_img, siglePngPath, slice)

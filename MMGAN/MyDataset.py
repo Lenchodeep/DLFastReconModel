@@ -342,7 +342,7 @@ class BraTSDataset(Dataset):
             }
 
 
-class FastMRIDatasetRefineGan(Dataset):
+class FastMRIDatasetRefineGan(Dataset): 
     '''
         The data range is 0-1
     '''

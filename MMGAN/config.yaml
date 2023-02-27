@@ -3,7 +3,7 @@ slice_range: [5,25]
 isZeroToOne: 1
 num_input_slices : 1
 imgSize: 256
-filters: 64
+filters: 32
 ## basic setting
 device: "cuda"
 epochs: 50
@@ -36,6 +36,7 @@ mask_path: "D:/datas/masks/gaussian/mask_20_256.pickle"
 tb_dir: "./tensorboard/directModal/radial30"
 output_dir: "./checkPoint/directModal/radial30"
 
-predModelPath: "./NetworkResult/SingleModal/gaussian20/Best_PSNR_epoch.pth"
+predModelPath: "./NetworkResult/DirectModal/gaussian20/Best_PSNR_epoch.pth"
+predictResultPath: "./NetworkResult/DirectModal/gaussian20/"
 predictDir: "E:/FastMRI/test"
-visualize_images: 0
+visualize_images: 1
