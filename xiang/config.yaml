@@ -26,9 +26,11 @@ testDC: 0
 ################################## paths ###################################
 
 imageDataDir : "E:/FastMRI/miniBatch/"                                                                                                                             ## the path of the train datas that used
-mask_path: "D:/datas/masks/radial/radial_30.pickle" 
+mask_path: "D:/datas/masks/gaussian/mask_50_256.pickle" 
 tb_dir: "./tensorboard/radial30/"
 output_dir: "./checkPoint/radial30/"
 
-predModelPath: "./checkPoint/multiDTrain/radial30/bestPsnr/Best_PSNR_epoch.pth"
+predModelPath: "./checkPoint/gaussian50/Best_PSNR_epoch.pth"
+predictResultPath: "./checkPoint/gaussian50/"
 predictDir: "E:/FastMRI/test"
+visualize_images: 1

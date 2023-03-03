@@ -32,11 +32,11 @@ critic: 9
 ################################## paths ###################################
 
 imageDataDir : "E:/FastMRI/miniBatch/"                                                                                                                             ## the path of the train datas that used
-mask_path: "D:/datas/masks/gaussian/mask_20_256.pickle" 
+mask_path: "D:/datas/masks/radial/radial_30.pickle" 
 tb_dir: "./tensorboard/directModal/radial30"
 output_dir: "./checkPoint/directModal/radial30"
 
-predModelPath: "./NetworkResult/DirectModal/gaussian20/Best_PSNR_epoch.pth"
-predictResultPath: "./NetworkResult/DirectModal/gaussian20/"
+predModelPath: "./NetworkResult/MultiModal/gaussian20/Best_PSNR_epoch.pth"
+predictResultPath: "./NetworkResult/MultiModal/gaussian20/"
 predictDir: "E:/FastMRI/test"
 visualize_images: 1

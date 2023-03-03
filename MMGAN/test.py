@@ -1,7 +1,6 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-import sys
-import yaml
+
 import torch
 import h5py
 import logging
@@ -16,6 +15,7 @@ from types import SimpleNamespace
 from Models import *
 from SingleModel import SingleGenerator
 from DirictModel import *
+from MMGAN import MMGenerator
 from utils import calculatePSNR, calculateSSIM, calcuNMSE, \
                 imgRegular, crop_toshape, fft2, ifft2, getArgs, pltImages, output2complex
 
@@ -326,7 +326,8 @@ if __name__ == '__main__':
 
     logging.info(f"Using device {args.device}")
     logging.info("Loading model {}".format(args.predModelPath))
-    model = DirectG(args)
+    # model = DirectG(args)
     # model = SingleGenerator(args)
+    model = MMGenerator(args)
 
     multimodalTest(args, model, False)

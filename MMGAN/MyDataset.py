@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from skimage.io import imsave
 
 ########################## FastMRI dataset #############################
 class FastMRIDataset(Dataset):
@@ -514,9 +515,19 @@ def main():
 
     print(refer_masked_img.shape, refer_masked_img.max(), refer_masked_img.min())
     print(refer_img.shape, refer_img.max(), refer_img.min())
-
+    
     # imsave("E:/FastMRI/gaussian20.png", masked_img)
-
+    savepath = "./NetworkResult/"
+    imsave(savepath+"T1_mask.png", refer_masked_img)
+    imsave(savepath+"T1.png", refer_img)
+    imsave(savepath+"T2_mask.png", masked_img)
+    imsave(savepath+"T2.png", target_img)
+    plt.figure()
+    plt.imshow(refer_masked_img,plt.cm.gray)
+    plt.title("mask_kimg2")
+    plt.figure()
+    plt.imshow(refer_img,plt.cm.gray)
+    plt.title("tar_kimg2")
     plt.figure()
     plt.imshow(masked_img,plt.cm.gray)
     plt.title("mask_kimg2")
@@ -526,7 +537,35 @@ def main():
     plt.show()
 
 if __name__ == "__main__":
-    main()
+    # main()
     # pass
+    filepath= "D:/datas/brast/4/"
+    T1path = filepath+"Brats18_TCIA05_396_1_t1.hdf5"
+    T2path = filepath+"Brats18_TCIA05_396_1_t2.hdf5"
+    T1cepath = filepath+"Brats18_TCIA05_396_1_t1ce.hdf5"
+    Flairpath = filepath+"Brats18_TCIA05_396_1_flair.hdf5"
+
+    with h5py.File(T1path, 'r') as t1, h5py.File(T2path, 'r') as t2, h5py.File(T1cepath, 'r') as t1ce, h5py.File(Flairpath, 'r') as flair:
+        T1img = np.rot90(t1['data'][ :, :, 80])
+        T2img = np.rot90(t2['data'][ :, :, 80])
+        T1ceimg = np.rot90(t1ce['data'][ :, :, 80])
+        flairimg = np.rot90(flair['data'][ :, :, 80])
+
+        from skimage.io import imsave
+
+        imsave(filepath+"t1.png", T1img)
+        imsave(filepath+"t2.png", T2img)
+        imsave(filepath+"t1ce.png", T1ceimg)
+        imsave(filepath+"flair.png", flairimg)
+
+        plt.figure()
+        plt.imshow(T1img,plt.cm.gray)
+        plt.figure()
+        plt.imshow(T2img,plt.cm.gray)  
+        plt.figure()
+        plt.imshow(T1ceimg,plt.cm.gray)  
+        plt.figure()
+        plt.imshow(flairimg,plt.cm.gray)
+        plt.show()
 
 

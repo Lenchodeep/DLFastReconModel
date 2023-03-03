@@ -119,21 +119,21 @@ def pltImages(ZF_imgs, rec_imgs, label_imgs, series_name,isDc = True, sliceList 
         reconImg = rec_imgs[:,:,slice]
         ZF_img = ZF_imgs[:,:,slice]
 
-        if isDc:
-        ### Kdc operation now we just add the original K to the sampled points
-            # mask = np.load('D:/datas/masks/radial/radial_30.npy')
-            masknot = 1-mask
+        # if isDc:
+        # ### Kdc operation now we just add the original K to the sampled points
+        #     # mask = np.load('D:/datas/masks/radial/radial_30.npy')
+        #     masknot = 1-mask
 
-            reconK = fft2(reconImg)
-            labelK = fft2(label)
+        #     reconK = fft2(reconImg)
+        #     labelK = fft2(label)
 
-            mask_recon = masknot * reconK
-            mask_label = mask * labelK
+        #     mask_recon = masknot * reconK
+        #     mask_label = mask * labelK
 
-            final_K = mask_recon + mask_label
-            final_recon = ifft2(final_K) 
-        else:
-            final_recon = reconImg
+        #     final_K = mask_recon + mask_label
+        #     final_recon = ifft2(final_K) 
+        # else:
+        final_recon = reconImg
 
         diff_image = 10*(label - final_recon)
         zf_diff_img = 10*(label - ZF_img)
@@ -174,7 +174,8 @@ def pltImages(ZF_imgs, rec_imgs, label_imgs, series_name,isDc = True, sliceList 
 
         plot_path = os.path.join(args.predictResultPath ,series_name+'_recon'+"{}.png".format(slice))
         plt.savefig(plot_path, bbox_inches='tight')
-        plt.show()
+        # plt.show()
+        plt.close("all")
         if savepng:
             siglePngPath = os.path.join(args.predictResultPath, 'SplitImage')
             save_numpy_image_to_png(label, ZF_img, final_recon, diff_image,zf_diff_img, siglePngPath, slice)

@@ -117,9 +117,9 @@ def test(args, model):
         T2_rec_imgs_full[:,:,i*sliceNum:(i+1)*sliceNum] = T2_rec_img
         T2_ZF_img_full[:,:,i*sliceNum:(i+1)*sliceNum] = T2_ZF_img
         
-        # if args.visualize_images:
-        #     logging.info("Visualizing results for image {}, close to continue ...".format(T2_image_path))
-        #     pltImages(zf_T2, rec_T2, FSPDWIimg, series_name =os.path.split(T2_image_path)[1],args = args, mask=mask, sliceList=[10,15,20])
+        if args.visualize_images:
+            logging.info("Visualizing results for image {}, close to continue ...".format(T2_image_path))
+            pltImages(T2_ZF_img, T2_rec_img, T2_tar_img, series_name =os.path.split(T2_image_path)[1],args = args, sliceList=[10,13,15])
 
     psnrarray = np.array(psnr_list)
     ssimarray = np.array(ssim_list)
